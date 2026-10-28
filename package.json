@@ -1,0 +1,16 @@
+{
+  "name": "kenclip",
+  "version": "1.0.0",
+  "description": "YouTube Video Clipper - Aplikasi untuk memotong video YouTube",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "hono": "^4.0.0"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}

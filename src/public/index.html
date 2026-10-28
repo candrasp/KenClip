@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KenClip - YouTube Video Clipper</title>
+    <link rel="icon" type="image/svg+xml" href="/logo.svg">
+    <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+    <!-- Header Bar -->
+    <header class="header">
+        <div class="header-left">
+            <div class="logo">
+                <img src="/logo.svg" alt="KenClip Logo" class="logo-img">
+                <span class="logo-text">KenClip</span>
+            </div>
+        </div>
+        <div class="header-center">
+            <div class="url-input-wrapper">
+                <input type="text" id="youtube-url" class="url-input" placeholder="https://www.youtube.com/watch?v=...">
+                <button id="clear-url-btn" class="btn-clear-url" style="display: none;">✕</button>
+            </div>
+            <button id="load-video-btn" class="btn-load">Muat Video</button>
+        </div>
+        <div class="header-right">
+            <div class="server-status">
+                <span class="status-dot"></span>
+                <span class="status-text">Server aktif</span>
+            </div>
+            <button id="stop-server-btn" class="btn-stop-server" title="Stop Server">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <rect x="3" y="3" width="10" height="10" rx="1"/>
+                </svg>
+                Stop Server
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Video Section (Left) -->
+        <section class="video-section">
+            <div id="video-container" class="video-player">
+                <div id="youtube-player"></div>
+                <div id="video-placeholder" class="video-placeholder">
+                    <div class="play-icon">▶</div>
+                    <p>Pratinjau dari YouTube IFrame Player</p>
+                </div>
+            </div>
+
+            <!-- Video Info -->
+            <div id="video-info" class="video-info" style="display: none;">
+                <div class="video-info-left">
+                    <h2 id="video-title" class="video-title">Judul video muncul di sini</h2>
+                    <p id="video-meta" class="video-meta">Durasi 12:34 · kualitas terbaik tersedia 1080p</p>
+                </div>
+                <div class="video-info-right">
+                    <p id="video-id-display" class="video-id">ID video: xxxxxxxxxxxx</p>
+                </div>
+            </div>
+
+            <!-- Timeline Section -->
+            <div class="timeline-section">
+                <div class="timeline-controls-bar">
+                    <!-- Sisi Kiri: Playback Button -->
+                    <div class="controls-left">
+                        <button id="play-selection-btn" class="btn-play-selection" disabled
+                            title="Putar bagian yang dipilih">
+                            <span class="btn-icon">▶</span>
+                            <span>Putar Terpilih</span>
+                        </button>
+                    </div>
+
+                    <!-- Sisi Tengah: Rentang Waktu (Inline Capsule Group) -->
+                    <div class="time-range-group">
+                        <div class="time-item">
+                            <span class="time-item-label">Mulai</span>
+                            <input type="text" id="start-time" placeholder="00:00" maxlength="5"
+                                title="Waktu mulai (MM:SS)">
+                        </div>
+                        <span class="time-arrow">→</span>
+                        <div class="time-item">
+                            <span class="time-item-label">Selesai</span>
+                            <input type="text" id="end-time" placeholder="00:00" maxlength="5"
+                                title="Waktu selesai (MM:SS)">
+                        </div>
+                        <div class="time-duration-divider"></div>
+                        <div class="time-item duration-item">
+                            <span class="time-item-label">Durasi</span>
+                            <span id="clip-duration" class="duration-badge">00:00</span>
+                        </div>
+                    </div>
+
+                    <!-- Sisi Kanan: Action Button Utama & Resolusi -->
+                    <div class="controls-right">
+                        <select id="clip-quality" class="quality-select" title="Pilih kualitas resolusi ekspor">
+                            <option value="1080">1080p</option>
+                            <option value="720" selected>720p</option>
+                            <option value="480">480p</option>
+                        </select>
+                        <button id="clip-btn" class="btn-clip-inline" disabled>
+                            <span class="btn-icon">✂</span>
+                            <span>Potong Klip</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="timeline-container">
+                    <div id="timeline" class="timeline">
+                        <div class="timeline-track"></div>
+                        <div class="timeline-grid">
+                            <div class="grid-line"></div>
+                            <div class="grid-line"></div>
+                            <div class="grid-line"></div>
+                            <div class="grid-line"></div>
+                        </div>
+                        <div id="selected-range" class="selected-range"></div>
+                        <div id="start-marker" class="marker start-marker">
+                            <span class="marker-time">00:00</span>
+                            <div class="marker-handle"></div>
+                        </div>
+                        <div id="end-marker" class="marker end-marker">
+                            <span class="marker-time">00:00</span>
+                            <div class="marker-handle"></div>
+                        </div>
+                    </div>
+                    <div class="timeline-labels">
+                        <span>00:00</span>
+                        <span id="timeline-label-1">01:34</span>
+                        <span id="timeline-label-2">03:08</span>
+                        <span id="timeline-label-3">04:41</span>
+                        <span id="timeline-label-4">06:17</span>
+                        <span id="timeline-label-5">07:51</span>
+                        <span id="timeline-label-6">09:25</span>
+                        <span id="timeline-label-7">10:59</span>
+                        <span id="timeline-duration">12:34</span>
+                    </div>
+                </div>
+
+                <p class="timeline-hint">
+                    Klik-tahan lalu geser penanda oranye · panah keyboard = 1 detik
+                </p>
+            </div>
+        </section>
+
+        <!-- Sidebar (Right) -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <span class="sidebar-badge">OUTPUT</span>
+                <h3 class="section-title">HASIL KLIP</h3>
+            </div>
+
+            <!-- Empty State (Tampil sebelum ada proses klip) -->
+            <div id="empty-state" class="sidebar-section empty-section">
+                <div class="empty-icon">🎬</div>
+                <h4>Belum Ada Klip</h4>
+                <p>Tentukan bagian video dengan penanda slider di sebelah kiri, lalu klik <strong>Potong Klip</strong>
+                    untuk memproses.</p>
+            </div>
+
+            <!-- Loading Section with Realtime Progress -->
+            <div id="loading-section" class="sidebar-section loading-section" style="display: none;">
+                <div class="progress-circle-wrapper">
+                    <svg class="progress-circle" viewBox="0 0 100 100">
+                        <circle class="circle-bg" cx="50" cy="50" r="42"></circle>
+                        <circle id="circle-bar" class="circle-bar" cx="50" cy="50" r="42"></circle>
+                    </svg>
+                    <div class="progress-percent" id="progress-percent">0%</div>
+                </div>
+
+                <h4 class="loading-title" id="loading-status-title">Memulai Proses...</h4>
+                <p class="loading-desc" id="loading-status-desc">Menghubungkan ke server...</p>
+
+                <div class="progress-bar-container">
+                    <div id="progress-bar-fill" class="progress-bar-fill"></div>
+                </div>
+            </div>
+
+            <!-- Hasil Section -->
+            <div id="result-section" class="sidebar-section result-section" style="display: none;">
+                <div class="result-video-wrapper">
+                    <video id="result-video" controls playsinline></video>
+                </div>
+                <div class="result-details">
+                    <div class="result-filename" id="result-filename">clip-1730000000000.mp4 · 00:05</div>
+                </div>
+                <div class="result-buttons">
+                    <button id="download-btn" class="btn-download">
+                        <span class="btn-icon">⬇</span>
+                        <span>Unduh .mp4</span>
+                    </button>
+                    <button id="delete-btn" class="btn-delete">
+                        <span class="btn-icon">🗑</span>
+                        <span>Hapus</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Footer Sidebar: Copyright -->
+            <footer class="sidebar-footer">
+                <span class="footer-copy">© KenClip by</span>
+                <a href="https://www.instagram.com/kenvanoprabowo/" target="_blank" rel="noopener noreferrer" class="footer-author" title="Instagram @kenvanoprabowo">
+                    <svg class="instagram-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                    </svg>
+                    <span>CandraSP</span>
+                </a>
+            </footer>
+        </aside>
+    </main>
+
+    <!-- Modern Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Modern Confirmation Modal Dialog -->
+    <div id="modal-container" class="modal-backdrop" style="display: none;">
+        <div class="modal-box">
+            <div class="modal-icon" id="modal-icon">⚠️</div>
+            <h3 class="modal-title" id="modal-title">Konfirmasi</h3>
+            <p class="modal-message" id="modal-message">Apakah Anda yakin?</p>
+            <div class="modal-actions">
+                <button id="modal-cancel-btn" class="btn-modal btn-modal-cancel">Batal</button>
+                <button id="modal-confirm-btn" class="btn-modal btn-modal-confirm">Ya, Lanjutkan</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="/script.js"></script>
+</body>
+
+</html>
