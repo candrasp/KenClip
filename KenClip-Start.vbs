@@ -14,4 +14,4 @@ WshShell.Run "cmd /c title KenClip Server && bun start", 0, False
 WScript.Sleep 3000
 
 ' Open browser silently
-WshShell.Run "http://localhost:8888", 1
+WshShell.Run "http://localhost:57777", 1

@@ -9,14 +9,23 @@ Aplikasi web modern, cepat, dan ringan berbasis **Bun & Hono** untuk memotong da
 ## ✨ Fitur Utama
 
 - ⚡ **Pemotongan Cepat (Instant Clipping)** - Memanfaatkan fitur `--download-sections` dari `yt-dlp`. Video berdurasi 1 jam hanya diunduh pada segmen detik yang Anda potong saja, menghemat kuota & bandwidth secara drastis.
-- 🎯 **Presisi Titik Potong Tinggi** - Didukung `--force-keyframes-at-cuts` untuk memastikan video dipotong tepat pada detik yang ditentukan.
-- 🎬 **Pratinjau Interaktif (Preview First)** - Tombol *Potong Klip* hanya aktif setelah Anda memvalidasi segmen dengan tombol *▶ Putar Terpilih*, memastikan klip tidak meleset.
+- 🎯 **Presisi Titik Potong Tinggi** - Didukung `--force-keyframes-at-cuts` serta tombol cepat `📌 Mulai` & `📌 Selesai` langsung dari posisi pemutaran video saat ini.
+- 🔍 **Timeline Zoom (<kbd>Ctrl</kbd> + Scroll)** - Zoom in/out timeline untuk memotong durasi beberapa detik pada video panjang (30+ menit) dengan sangat mudah dan presisi, dilengkapi proteksi zoom browser dan tombol *Reset Zoom*.
+- 📐 **Konversi Aspek Rasio (On-Demand)** - Ubah rasio klip video lokal ke format media sosial secara instan:
+  - `9:16 Shorts (Center Crop)`
+  - `9:16 Shorts (Blur Background)`
+  - `1:1 Square (Instagram Feed)`
+- 💾 **Menu Dropdown Simpan Terpadu**:
+  - `🎬 Video Normal (Ada Suara)`
+  - `🔇 Video Bisu (Tanpa Suara)` - Menghapus trek audio secara instan tanpa render ulang (`-c:v copy -an`).
+  - `🎵 Hanya Audio mp3` - Mengekstrak audio berkualitas tinggi (`libmp3lame`) on-demand.
+- ⚙️ **Pengaturan Folder Penyimpanan Lokal** - Tentukan lokasi folder penyimpanan khusus untuk Video dan Audio via dialog native Windows File Explorer serta tombol satu-klik buka Windows Explorer.
 - 🎥 **Sistem Resolusi Adaptif** - Opsi resolusi ekspor (1080p, 720p, 480p, 360p) otomatis menyesuaikan ketersediaan kualitas video sumber di YouTube.
 - 🛡️ **Quality & Security Protection**:
   - Validasi ketat domain YouTube & regex nama file aman (`Anti Path-Traversal`).
   - Proteksi eksekusi argumen `Bun.spawn` murni (`Anti Command-Injection`).
   - Proteksi video kualitas buruk (≤ 240p) agar hasil klip tetap layak ditonton.
-- 🧹 **Auto-Cleanup 1 Jam** - File klip lama di folder `clips/` otomatis dibersihkan setiap 15 menit agar media penyimpanan tidak penuh.
+- 🧹 **Auto-Cleanup Konfigurabel** - File klip lama di folder `clips/` otomatis dibersihkan setiap 15 menit (dapat diaktifkan/dinonaktifkan di menu pengaturan).
 - 🎨 **Tampilan Gelap Modern (Full-Width Desktop Optimized)** - Didesain pas 1 layar penuh (khususnya rasio 1366×768 / 1080p), dilengkapi sistem **Toast Notifications** dan **Confirmation Modal Dialog** estetis.
 
 ---
@@ -27,14 +36,19 @@ Aplikasi web modern, cepat, dan ringan berbasis **Bun & Hono** untuk memotong da
    - Tempel link video YouTube (mendukung format `watch?v=`, `shorts/`, atau `youtu.be/`).
    - Klik tombol **Muat Video** (video langsung termuat instan < 0.2 detik).
 2. **Tentukan Rentang Waktu Klip**:
-   - Geser penanda slider oranye di timeline, atau ketik langsung format `MM:SS` pada kolom **Mulai** dan **Selesai**.
-3. **Pilih Resolusi Ekspor**:
-   - Pilih kualitas dari dropdown yang muncul (1080p, 720p, 480p, atau 360p).
-4. **Validasi & Eksekusi Potong**:
+   - Geser penanda slider oranye di timeline, gunakan <kbd>Ctrl</kbd> + Scroll untuk memperbesar timeline jika video panjang.
+   - Atau gunakan tombol cepat `📌 Mulai` / `📌 Selesai` saat video diputar ke detik yang diinginkan.
+3. **Validasi & Eksekusi Potong**:
    - Klik tombol **▶ Putar Terpilih** untuk mempratinjau bagian video yang dipilih.
-   - Tombol **✂ Potong Klip** akan otomatis terbuka dan siap diklik.
-5. **Unduh Klip**:
-   - Setelah proses selesai (biasanya hanya beberapa detik), video hasil siap diputar langsung di panel kanan dan diunduh (`⬇ Unduh .mp4`).
+   - Pilih kualitas dari dropdown resolusi yang otomatis aktif (1080p, 720p, 480p, atau 360p).
+   - Klik **✂ Potong Klip**.
+4. **Kelola Hasil Klip di Sidebar**:
+   - **💾 Simpan Video / Audio ▾**:
+     - *Video Normal (Ada Suara)*: Simpan klip MP4 utuh.
+     - *Video Bisu (Tanpa Suara)*: Simpan video tanpa suara.
+     - *Hanya Audio mp3*: Ekstrak dan simpan audio saja.
+   - **📐 Aspek Rasio**: Pilih format `9:16 Shorts (Crop/Blur)` atau `1:1 Square` lalu klik **Terapkan**.
+   - **⚙️ Pengaturan**: Klik ikon gerigi di header sidebar untuk mengatur direktori folder penyimpanan default.
 
 ---
 
@@ -58,7 +72,7 @@ Pastikan binary berikut telah terpasang di sistem dan terdaftar pada PATH lingku
 
 - [Bun](https://bun.sh/) (v1.0 ke atas)
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) (versi terbaru, disarankan `yt-dlp -U`)
-- [FFmpeg](https://ffmpeg.org/) (digunakan internal oleh yt-dlp untuk muxing stream)
+- [FFmpeg](https://ffmpeg.org/) (digunakan untuk muxing stream, crop aspek rasio, mute, & konversi MP3)
 
 > Panduan instalasi external binary:
 > - [INSTALL_FFMPEG.md](INSTALL_FFMPEG.md)
@@ -89,7 +103,7 @@ Pastikan binary berikut telah terpasang di sistem dan terdaftar pada PATH lingku
      bun start
      ```
 
-4. Buka di browser favorit Anda: `http://localhost:3000`
+4. Buka di browser favorit Anda: `http://localhost:57777`
 
 ---
 
@@ -97,13 +111,15 @@ Pastikan binary berikut telah terpasang di sistem dan terdaftar pada PATH lingku
 
 ```text
 KenClip/
-├── clips/                # Direktori penyimpanan hasil potongan klip (.mp4)
+├── clips/                # Direktori penyimpanan file klip sementara (.mp4 / .mp3)
+├── kenclip.config.json   # Konfigurasi lokal (folder penyimpanan & preferensi)
 ├── src/
 │   ├── index.ts          # Server backend (Hono + Bun.spawn CLI controller)
 │   └── public/           # Frontend Web Application
 │       ├── index.html    # Layout UI & player markup
 │       ├── style.css     # Styling Dark Mode responsif (1366x768 optimized)
-│       ├── script.js     # Logika timeline, IFrame API, & modal handler
+│       ├── script.js     # Logika timeline, IFrame API, & eksekusi klip
+│       ├── settings.js   # Modul pengaturan folder & dialog Windows
 │       └── logo.svg      # Logo vektor resmi KenClip
 ├── package.json          # Manifest dependensi & scripts
 ├── ROADMAP.md            # Catatan rencana pengembangan fitur mendatang
@@ -116,9 +132,17 @@ KenClip/
 
 - `POST /api/video-info` - Mengambil info judul & thumbnail video instan via YouTube oEmbed API.
 - `POST /api/video-quality` - Memindai daftar kualitas maksimal video sumber di latar belakang.
-- `POST /api/clip` - Memotong segmen video dengan yt-dlp sesuai durasi dan resolusi pilihan.
-- `GET /api/download/:filename` - Streaming/unduh file klip MP4 (didukung HTTP range).
+- `POST /api/clip` - Memotong segmen video dengan `yt-dlp` sesuai durasi dan resolusi pilihan.
+- `POST /api/convert-aspect` - Mengubah aspek rasio video lokal (9:16 Crop/Blur, 1:1 Square) via FFmpeg.
+- `POST /api/extract-audio` - Mengekstrak audio klip lokal ke format MP3 on-demand.
+- `POST /api/mute-video` - Menghapus trek audio dari video secara instan tanpa render ulang.
+- `GET /api/settings` & `POST /api/settings` - Mengambil dan memperbarui konfigurasi penyimpanan.
+- `POST /api/select-folder/video` & `/audio` - Membuka dialog pemilih folder native Windows File Explorer.
+- `POST /api/open-folder` - Membuka direktori penyimpanan di Windows Explorer.
+- `POST /api/save-to-custom-dir` - Menyalin file klip ke folder custom pengguna.
+- `GET /api/download/:filename` - Streaming/unduh file klip MP4/MP3 (didukung HTTP range).
 - `DELETE /api/clip/:filename` - Menghapus file klip dari server lokal.
+- `POST /api/shutdown` - Menghentikan server lokal secara aman.
 
 ---
 

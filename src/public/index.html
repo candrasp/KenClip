@@ -31,10 +31,12 @@
                 <span class="status-text">Server aktif</span>
             </div>
             <button id="stop-server-btn" class="btn-stop-server" title="Stop Server">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <rect x="3" y="3" width="10" height="10" rx="1"/>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                    <line x1="12" y1="2" x2="12" y2="12"></line>
                 </svg>
-                Stop Server
+
             </button>
         </div>
     </header>
@@ -70,23 +72,29 @@
                         <button id="play-selection-btn" class="btn-play-selection" disabled
                             title="Putar bagian yang dipilih">
                             <span class="btn-icon">▶</span>
-                            <span>Putar Terpilih</span>
+                            <span>Putar Yang Dipilih</span>
                         </button>
                     </div>
 
                     <!-- Sisi Tengah: Rentang Waktu (Inline Capsule Group) -->
                     <div class="time-range-group">
+                        <button id="set-start-btn" class="btn-set-time"
+                            title="Set waktu mulai ke posisi video saat ini">
+                            <span>📌 Mulai</span>
+                        </button>
                         <div class="time-item">
-                            <span class="time-item-label">Mulai</span>
                             <input type="text" id="start-time" placeholder="00:00" maxlength="5"
                                 title="Waktu mulai (MM:SS)">
                         </div>
                         <span class="time-arrow">→</span>
                         <div class="time-item">
-                            <span class="time-item-label">Selesai</span>
                             <input type="text" id="end-time" placeholder="00:00" maxlength="5"
                                 title="Waktu selesai (MM:SS)">
                         </div>
+                        <button id="set-end-btn" class="btn-set-time"
+                            title="Set waktu selesai ke posisi video saat ini">
+                            <span>📌 Selesai</span>
+                        </button>
                         <div class="time-duration-divider"></div>
                         <div class="time-item duration-item">
                             <span class="time-item-label">Durasi</span>
@@ -96,19 +104,31 @@
 
                     <!-- Sisi Kanan: Action Button Utama & Resolusi -->
                     <div class="controls-right">
-                        <select id="clip-quality" class="quality-select" title="Pilih kualitas resolusi ekspor">
+                        <select id="clip-quality" class="quality-select" title="Pilih kualitas resolusi ekspor"
+                            disabled>
                             <option value="1080">1080p</option>
                             <option value="720" selected>720p</option>
                             <option value="480">480p</option>
                         </select>
                         <button id="clip-btn" class="btn-clip-inline" disabled>
                             <span class="btn-icon">✂</span>
-                            <span>Potong Klip</span>
+                            <span>Potong</span>
                         </button>
                     </div>
                 </div>
 
                 <div class="timeline-container">
+                    <div class="timeline-labels">
+                        <span>00:00</span>
+                        <span id="timeline-label-1">01:34</span>
+                        <span id="timeline-label-2">03:08</span>
+                        <span id="timeline-label-3">04:41</span>
+                        <span id="timeline-label-4">06:17</span>
+                        <span id="timeline-label-5">07:51</span>
+                        <span id="timeline-label-6">09:25</span>
+                        <span id="timeline-label-7">10:59</span>
+                        <span id="timeline-duration">12:34</span>
+                    </div>
                     <div id="timeline" class="timeline">
                         <div class="timeline-track"></div>
                         <div class="timeline-grid">
@@ -127,30 +147,35 @@
                             <div class="marker-handle"></div>
                         </div>
                     </div>
-                    <div class="timeline-labels">
-                        <span>00:00</span>
-                        <span id="timeline-label-1">01:34</span>
-                        <span id="timeline-label-2">03:08</span>
-                        <span id="timeline-label-3">04:41</span>
-                        <span id="timeline-label-4">06:17</span>
-                        <span id="timeline-label-5">07:51</span>
-                        <span id="timeline-label-6">09:25</span>
-                        <span id="timeline-label-7">10:59</span>
-                        <span id="timeline-duration">12:34</span>
-                    </div>
                 </div>
 
-                <p class="timeline-hint">
-                    Klik-tahan lalu geser penanda oranye · panah keyboard = 1 detik
-                </p>
+                <div class="timeline-hint-container">
+                    <p class="timeline-hint">
+                        Klik-tahan lalu geser penanda oranye · panah keyboard = 1 detik · <kbd>Ctrl</kbd>+Scroll = Zoom
+                        Timeline
+                    </p>
+                    <div id="zoom-badge-group" class="zoom-badge-group" style="display: none;">
+                        <span id="zoom-level-badge" class="zoom-level-badge" title="Tingkat zoom aktif">1.0x</span>
+                        <button id="reset-zoom-btn" class="btn-reset-zoom"
+                            title="Klik untuk mengembalikan zoom ke tampilan penuh">Reset Zoom</button>
+                    </div>
+                </div>
             </div>
         </section>
 
         <!-- Sidebar (Right) -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <span class="sidebar-badge">OUTPUT</span>
-                <h3 class="section-title">HASIL KLIP</h3>
+                <div class="sidebar-header-left">
+                    <span class="sidebar-badge">OUTPUT</span>
+                    <h3 class="section-title">HASIL KLIP</h3>
+                </div>
+                <button id="open-settings-btn" class="btn-settings-trigger" title="Pengaturan Folder & Penyimpanan">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                        <path
+                            d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+                    </svg>
+                </button>
             </div>
 
             <!-- Empty State (Tampil sebelum ada proses klip) -->
@@ -187,14 +212,51 @@
                 <div class="result-details">
                     <div class="result-filename" id="result-filename">clip-1730000000000.mp4 · 00:05</div>
                 </div>
-                <div class="result-buttons">
-                    <button id="download-btn" class="btn-download">
-                        <span class="btn-icon">⬇</span>
-                        <span>Unduh .mp4</span>
-                    </button>
-                    <button id="delete-btn" class="btn-delete">
+
+                <!-- Konversi Aspek Rasio -->
+                <div class="aspect-ratio-box">
+                    <div class="aspect-header">
+                        <span class="aspect-label">📐 Aspek Rasio</span>
+                    </div>
+                    <div class="aspect-control-group">
+                        <select id="aspect-mode-select" class="aspect-select">
+                            <option value="9:16-crop">9:16 Shorts (Center Crop)</option>
+                            <option value="9:16-blur">9:16 Shorts (Blur Background)</option>
+                            <option value="1:1">1:1 Square (Instagram)</option>
+                        </select>
+                        <button id="apply-aspect-btn" class="btn-apply-aspect" title="Ubah aspek rasio video">
+                            <span>Terapkan</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tombol Aksi Simpan & Hapus -->
+                <div class="result-actions">
+                    <div class="save-unified-wrapper">
+                        <button id="save-main-btn" class="btn-save-unified">
+                            <span class="btn-icon">💾</span>
+                            <span>Simpan Video / Audio</span>
+                            <span class="btn-arrow">▾</span>
+                        </button>
+                        <div id="save-unified-dropdown" class="save-dropdown-menu" style="display: none;">
+                            <button id="save-opt-normal" class="dropdown-menu-item">
+                                <span class="item-icon">🎬</span>
+                                <span class="item-text">Video Normal (Ada Suara)</span>
+                            </button>
+                            <button id="save-opt-muted" class="dropdown-menu-item">
+                                <span class="item-icon">🔇</span>
+                                <span class="item-text">Video Bisu (Tanpa Suara)</span>
+                            </button>
+                            <button id="save-opt-audio" class="dropdown-menu-item">
+                                <span class="item-icon">🎵</span>
+                                <span class="item-text">Hanya Audio mp3</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button id="delete-btn" class="btn-delete" title="Hapus klip ini">
                         <span class="btn-icon">🗑</span>
-                        <span>Hapus</span>
+                        <span>Hapus Klip</span>
                     </button>
                 </div>
             </div>
@@ -202,9 +264,11 @@
             <!-- Footer Sidebar: Copyright -->
             <footer class="sidebar-footer">
                 <span class="footer-copy">© KenClip by</span>
-                <a href="https://www.instagram.com/kenvanoprabowo/" target="_blank" rel="noopener noreferrer" class="footer-author" title="Instagram @kenvanoprabowo">
+                <a href="https://www.instagram.com/kenvanoprabowo/" target="_blank" rel="noopener noreferrer"
+                    class="footer-author" title="Instagram @kenvanoprabowo">
                     <svg class="instagram-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                        <path
+                            d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
                     </svg>
                     <span>CandraSP</span>
                 </a>
@@ -228,8 +292,97 @@
         </div>
     </div>
 
+    <!-- Modal Pengaturan Folder & Aplikasi -->
+    <div id="settings-modal" class="modal-backdrop" style="display: none;">
+        <div class="modal-box modal-box-settings">
+            <div class="settings-modal-header">
+                <div class="settings-title-group">
+                    <span class="settings-icon">⚙️</span>
+                    <h3>Pengaturan Penyimpanan</h3>
+                </div>
+                <button id="close-settings-btn" class="btn-close-modal" title="Tutup">✕</button>
+            </div>
+
+            <div class="settings-body">
+                <!-- Folder Video -->
+                <div class="settings-item">
+                    <label class="settings-label">
+                        <span>🎬 Folder Simpan Video (.mp4)</span>
+                    </label>
+                    <div class="settings-input-group">
+                        <input type="text" id="setting-video-dir" class="settings-input"
+                            placeholder="Default: ./clips (Ketik path atau pilih folder)">
+                        <button id="browse-video-dir-btn" class="btn-browse-folder"
+                            title="Pilih folder lewat dialog Windows">Pilih Folder</button>
+                        <button id="open-video-dir-btn" class="btn-open-folder"
+                            title="Buka di File Explorer">📂</button>
+                    </div>
+                </div>
+
+                <!-- Folder Audio -->
+                <div class="settings-item">
+                    <label class="settings-label">
+                        <span>🎵 Folder Simpan Audio (.mp3)</span>
+                    </label>
+                    <div class="settings-input-group">
+                        <input type="text" id="setting-audio-dir" class="settings-input"
+                            placeholder="Default: ./clips (Ketik path atau pilih folder)">
+                        <button id="browse-audio-dir-btn" class="btn-browse-folder"
+                            title="Pilih folder lewat dialog Windows">Pilih Folder</button>
+                        <button id="open-audio-dir-btn" class="btn-open-folder"
+                            title="Buka di File Explorer">📂</button>
+                    </div>
+                </div>
+
+                <div class="settings-divider"></div>
+
+                <!-- Radio Option 1: Auto Buka Folder Setelah Disimpan -->
+                <div class="settings-radio-section">
+                    <div class="radio-section-info">
+                        <strong>Buka Folder Otomatis</strong>
+                        <span>Otomatis buka File Explorer Windows saat file berhasil disimpan</span>
+                    </div>
+                    <div class="radio-toggle-group">
+                        <label class="radio-option">
+                            <input type="radio" name="auto-open-folder" value="true">
+                            <span class="radio-pill">Ya</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="auto-open-folder" value="false">
+                            <span class="radio-pill">Tidak</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Radio Option 2: Pembersihan Otomatis Klip Lama -->
+                <div class="settings-radio-section">
+                    <div class="radio-section-info">
+                        <strong>Pembersihan Otomatis (1 Jam)</strong>
+                        <span>Hapus file klip sementara di server lokal jika lebih tua dari 1 jam</span>
+                    </div>
+                    <div class="radio-toggle-group">
+                        <label class="radio-option">
+                            <input type="radio" name="auto-cleanup" value="true">
+                            <span class="radio-pill">Ya</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="auto-cleanup" value="false">
+                            <span class="radio-pill">Tidak</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-modal-footer">
+                <button id="reset-settings-btn" class="btn-modal btn-modal-reset">Reset Default</button>
+                <button id="save-settings-btn" class="btn-modal btn-modal-save">Simpan Pengaturan</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://www.youtube.com/iframe_api"></script>
     <script src="/script.js"></script>
+    <script src="/settings.js"></script>
 </body>
 
 </html>

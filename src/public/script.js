@@ -106,6 +106,10 @@ let playbackInterval = null; // Untuk monitoring playback
 let lastSeekTime = 0; // Untuk throttling auto-seek
 let wasPlayingBeforeDrag = false; // Track player state sebelum drag
 
+// Timeline viewport state (untuk zoom Ctrl+Scroll)
+let viewStart = 0; // detik awal viewport yang terlihat
+let viewEnd = 0;   // detik akhir viewport yang terlihat
+
 // Show/hide clear button
 const urlInput = document.getElementById('youtube-url');
 const clearBtn = document.getElementById('clear-url-btn');
@@ -130,15 +134,24 @@ function resetAllState() {
 
     videoDuration = 0;
 
+    // Reset timeline viewport
+    viewStart = 0;
+    viewEnd = 0;
+    updateZoomIndicator();
+
     // Reset controls
     const clipBtn = document.getElementById('clip-btn');
     const playBtn = document.getElementById('play-selection-btn');
+    const clipQuality = document.getElementById('clip-quality');
     if (clipBtn) {
         clipBtn.disabled = true;
         clipBtn.title = 'Putar bagian terpilih terlebih dahulu sebelum memotong';
     }
     if (playBtn) {
         playBtn.disabled = true;
+    }
+    if (clipQuality) {
+        clipQuality.disabled = true;
     }
 
     // Reset inputs & duration display
@@ -306,6 +319,8 @@ document.getElementById('load-video-btn').addEventListener('click', async () => 
                     controls: 1,
                     modestbranding: 1,
                     rel: 0,
+                    fs: 0,              // Sembunyikan tombol fullscreen YouTube
+                    iv_load_policy: 3,  // Nonaktifkan anotasi / kartu popup rekomendasi
                     enablejsapi: 1,
                     origin: window.location.origin
                 },
@@ -355,6 +370,10 @@ function syncDurationAndTimeline() {
         videoDuration = newDuration;
         console.log('Synchronized new video duration:', videoDuration);
 
+        // Reset viewport ke full duration saat video baru di-load
+        viewStart = 0;
+        viewEnd = videoDuration;
+
         // Update timeline labels
         updateTimelineLabels();
         const timelineDuration = document.getElementById('timeline-duration');
@@ -386,13 +405,22 @@ function updateTimelineLabels() {
     if (videoDuration === 0) return;
 
     const segments = 8;
+    const vStart = viewStart || 0;
+    const vEnd = viewEnd || videoDuration;
+    const viewDuration = vEnd - vStart;
+
     for (let i = 1; i < segments; i++) {
-        const time = (videoDuration / segments) * i;
+        const time = vStart + (viewDuration / segments) * i;
         const label = document.getElementById(`timeline-label-${i}`);
         if (label) {
             label.textContent = secondsToMMSS(time);
         }
     }
+
+    const labelStart = document.querySelector('.timeline-labels span:first-child');
+    if (labelStart) labelStart.textContent = secondsToMMSS(vStart);
+    const labelEnd = document.getElementById('timeline-duration');
+    if (labelEnd) labelEnd.textContent = secondsToMMSS(vEnd);
 }
 
 // Initialize markers
@@ -402,14 +430,18 @@ function initializeMarkers() {
         return;
     }
 
+    // Reset viewport ke full duration setiap video baru
+    viewStart = 0;
+    viewEnd = videoDuration;
+
     const startMarker = document.getElementById('start-marker');
     const endMarker = document.getElementById('end-marker');
 
-    // Set initial positions (10% and 90%)
+    // Set initial positions (10% dan 90% dari viewport)
     startMarker.style.left = '10%';
     endMarker.style.left = '90%';
 
-    // Update times
+    // Update times berdasarkan viewport
     updateMarkerTime('start', videoDuration * 0.1);
     updateMarkerTime('end', videoDuration * 0.9);
 
@@ -429,17 +461,59 @@ function updateMarkerTime(marker, seconds) {
     document.getElementById(inputId).value = timeStr;
 }
 
+// Konversi detik ke posisi persen dalam viewport
+function secondsToViewPct(seconds) {
+    const vStart = viewStart || 0;
+    const vEnd = viewEnd || videoDuration;
+    return ((seconds - vStart) / (vEnd - vStart)) * 100;
+}
+
+// Konversi posisi persen dalam viewport ke detik
+function viewPctToSeconds(pct) {
+    const vStart = viewStart || 0;
+    const vEnd = viewEnd || videoDuration;
+    return vStart + (pct / 100) * (vEnd - vStart);
+}
+
+// Reposisi ulang marker di timeline setelah zoom/pan agar tetap di posisi waktu yang benar
+function repositionMarkersAfterZoom() {
+    const startTime = document.getElementById('start-time').value;
+    const endTime = document.getElementById('end-time').value;
+
+    if (isValidTimeFormat(startTime)) {
+        const sec = mmssToSeconds(startTime);
+        const pct = secondsToViewPct(sec);
+        document.getElementById('start-marker').style.left = Math.max(0, Math.min(100, pct)) + '%';
+    }
+    if (isValidTimeFormat(endTime)) {
+        const sec = mmssToSeconds(endTime);
+        const pct = secondsToViewPct(sec);
+        document.getElementById('end-marker').style.left = Math.max(0, Math.min(100, pct)) + '%';
+    }
+    updateSelectedRange();
+}
+
 // Update selected range visual
 function updateSelectedRange() {
     const startMarker = document.getElementById('start-marker');
     const endMarker = document.getElementById('end-marker');
     const selectedRange = document.getElementById('selected-range');
 
-    const startPos = parseFloat(startMarker.style.left);
-    const endPos = parseFloat(endMarker.style.left);
+    const startPos = parseFloat(startMarker.style.left) || 0;
+    const endPos = parseFloat(endMarker.style.left) || 0;
 
     selectedRange.style.left = startPos + '%';
     selectedRange.style.width = (endPos - startPos) + '%';
+
+    // Hindari tabrakan horizontal badge waktu bawah jika jarak marker sangat dekat (< 6%)
+    const endBadge = endMarker.querySelector('.marker-time');
+    if (endBadge) {
+        if (Math.abs(endPos - startPos) < 6) {
+            endBadge.style.top = '72px'; // Turunkan sedikit jika terlalu rapat
+        } else {
+            endBadge.style.top = '48px';
+        }
+    }
 }
 
 // Update clip duration
@@ -489,25 +563,24 @@ function setupMarkerDragging() {
         x = Math.max(0, Math.min(x, timelineRect.width));
 
         const percentage = (x / timelineRect.width) * 100;
-        const seconds = (percentage / 100) * videoDuration;
+        // Konversi posisi pixel ke detik via viewport
+        const seconds = viewPctToSeconds(percentage);
+        const clampedSeconds = Math.max(viewStart, Math.min(viewEnd, seconds));
 
         const startMarker = document.getElementById('start-marker');
         const endMarker = document.getElementById('end-marker');
-        const startPos = parseFloat(startMarker.style.left);
-        const endPos = parseFloat(endMarker.style.left);
+        const startSeconds = viewPctToSeconds(parseFloat(startMarker.style.left));
+        const endSeconds = viewPctToSeconds(parseFloat(endMarker.style.left));
 
-        if (currentMarker === 'start' && percentage < endPos - 1) {
+        // Batasi jarak minimum 1 detik (nyata, bukan persen)
+        if (currentMarker === 'start' && clampedSeconds <= endSeconds - 1) {
             startMarker.style.left = percentage + '%';
-            updateMarkerTime('start', seconds);
-
-            // Throttled auto-seek
-            autoSeekToMarker(seconds);
-        } else if (currentMarker === 'end' && percentage > startPos + 1) {
+            updateMarkerTime('start', clampedSeconds);
+            autoSeekToMarker(clampedSeconds);
+        } else if (currentMarker === 'end' && clampedSeconds >= startSeconds + 1) {
             endMarker.style.left = percentage + '%';
-            updateMarkerTime('end', seconds);
-
-            // Throttled auto-seek
-            autoSeekToMarker(seconds);
+            updateMarkerTime('end', clampedSeconds);
+            autoSeekToMarker(clampedSeconds);
         }
 
         updateSelectedRange();
@@ -530,6 +603,103 @@ function setupMarkerDragging() {
 
 setupMarkerDragging();
 
+// Cegah zoom browser jika kursor berada di luar area timeline
+window.addEventListener('wheel', (e) => {
+    if (e.ctrlKey) {
+        const isOverTimeline = e.target.closest('#timeline');
+        if (!isOverTimeline) {
+            e.preventDefault();
+        }
+    }
+}, { passive: false });
+
+// Cegah pintasan tombol zoom global browser (Ctrl +, Ctrl -, Ctrl 0)
+window.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && (e.key === '=' || e.key === '-' || e.key === '0' || e.key === '+')) {
+        e.preventDefault();
+    }
+});
+
+// Zoom Timeline via Ctrl+Scroll — terpusat pada posisi kursor di timeline
+document.getElementById('timeline').addEventListener('wheel', (e) => {
+    if (!e.ctrlKey || videoDuration === 0) return;
+    e.preventDefault();
+
+    const timeline = document.getElementById('timeline');
+    const timelineRect = timeline.getBoundingClientRect();
+
+    // Hitung posisi kursor dalam detik sebagai titik pusat zoom
+    const cursorX = e.clientX - timelineRect.left;
+    const cursorPct = Math.max(0, Math.min(1, cursorX / timelineRect.width));
+    const vStart = viewStart || 0;
+    const vEnd = viewEnd || videoDuration;
+    const viewDuration = vEnd - vStart;
+    const cursorSeconds = vStart + cursorPct * viewDuration;
+
+    // Faktor zoom: batasi jendela viewport minimal 30 detik (agar tidak over-zoom sampai ratusan kali)
+    const MIN_VIEWPORT_SECONDS = Math.min(videoDuration, 30);
+    const zoomFactor = e.deltaY < 0 ? 0.75 : 1.35;
+    const newViewDuration = Math.min(videoDuration, Math.max(MIN_VIEWPORT_SECONDS, viewDuration * zoomFactor));
+
+    // Pertahankan posisi kursor sebagai titik anchor
+    let newStart = cursorSeconds - cursorPct * newViewDuration;
+    let newEnd = newStart + newViewDuration;
+
+    // Klem ke batas durasi total
+    if (newStart < 0) { newEnd = Math.min(videoDuration, newEnd - newStart); newStart = 0; }
+    if (newEnd > videoDuration) { newStart = Math.max(0, newStart - (newEnd - videoDuration)); newEnd = videoDuration; }
+
+    viewStart = newStart;
+    viewEnd = newEnd;
+
+    updateTimelineLabels();
+    repositionMarkersAfterZoom();
+    updateZoomIndicator();
+}, { passive: false });
+
+// Helper untuk memperbarui badge persentase zoom & tombol reset
+function updateZoomIndicator() {
+    const badgeGroup = document.getElementById('zoom-badge-group');
+    const badgeLevel = document.getElementById('zoom-level-badge');
+    if (!badgeGroup || !badgeLevel || videoDuration === 0) return;
+
+    const vStart = viewStart || 0;
+    const vEnd = viewEnd || videoDuration;
+    const currentViewDur = vEnd - vStart;
+    const zoomMultiplier = videoDuration / currentViewDur;
+
+    if (zoomMultiplier > 1.05) {
+        badgeGroup.style.display = 'flex';
+        badgeLevel.textContent = `${zoomMultiplier.toFixed(1)}x`;
+    } else {
+        badgeGroup.style.display = 'none';
+    }
+}
+
+// Reset Zoom ke tampilan penuh
+function resetTimelineZoom() {
+    if (videoDuration === 0) return;
+    viewStart = 0;
+    viewEnd = videoDuration;
+    updateTimelineLabels();
+    repositionMarkersAfterZoom();
+    updateZoomIndicator();
+}
+
+// Event: Klik tombol Reset Zoom
+const resetZoomBtn = document.getElementById('reset-zoom-btn');
+if (resetZoomBtn) {
+    resetZoomBtn.addEventListener('click', resetTimelineZoom);
+}
+
+// Event: Double-click pada track timeline untuk reset zoom instan
+document.getElementById('timeline').addEventListener('dblclick', (e) => {
+    // Jangan picu jika double-click mengenai penanda marker
+    if (e.target.closest('.marker')) return;
+    resetTimelineZoom();
+    showToast('Zoom timeline dikembalikan ke tampilan penuh', 'info', 2000);
+});
+
 // Throttled auto-seek function
 function autoSeekToMarker(seconds) {
     if (!player) return;
@@ -544,6 +714,47 @@ function autoSeekToMarker(seconds) {
         console.log('Auto-seek to:', seconds.toFixed(2));
     }
 }
+
+// Tombol Cepat: Set Mulai & Set Selesai dari posisi pemutaran video saat ini
+document.getElementById('set-start-btn').addEventListener('click', () => {
+    if (!player || typeof player.getCurrentTime !== 'function' || videoDuration === 0) return;
+
+    const currentSec = Math.floor(player.getCurrentTime());
+    const endVal = document.getElementById('end-time').value;
+    const endSec = isValidTimeFormat(endVal) ? mmssToSeconds(endVal) : videoDuration;
+
+    if (currentSec >= endSec) {
+        showToast('Waktu mulai tidak boleh melebihi atau sama dengan waktu selesai', 'warning');
+        return;
+    }
+
+    const percentage = (currentSec / videoDuration) * 100;
+    document.getElementById('start-marker').style.left = percentage + '%';
+    updateMarkerTime('start', currentSec);
+    updateSelectedRange();
+    updateClipDuration();
+    showToast(`Waktu mulai di-set ke ${secondsToMMSS(currentSec)}`, 'info');
+});
+
+document.getElementById('set-end-btn').addEventListener('click', () => {
+    if (!player || typeof player.getCurrentTime !== 'function' || videoDuration === 0) return;
+
+    const currentSec = Math.ceil(player.getCurrentTime());
+    const startVal = document.getElementById('start-time').value;
+    const startSec = isValidTimeFormat(startVal) ? mmssToSeconds(startVal) : 0;
+
+    if (currentSec <= startSec) {
+        showToast('Waktu selesai harus lebih besar dari waktu mulai', 'warning');
+        return;
+    }
+
+    const percentage = (currentSec / videoDuration) * 100;
+    document.getElementById('end-marker').style.left = percentage + '%';
+    updateMarkerTime('end', currentSec);
+    updateSelectedRange();
+    updateClipDuration();
+    showToast(`Waktu selesai di-set ke ${secondsToMMSS(currentSec)}`, 'info');
+});
 
 // Manual time input
 document.getElementById('start-time').addEventListener('input', (e) => {
@@ -595,6 +806,12 @@ document.getElementById('play-selection-btn').addEventListener('click', () => {
             } else {
                 clipBtn.disabled = false;
                 clipBtn.removeAttribute('title');
+
+                // Aktifkan dropdown resolusi bersamaan dengan tombol klip
+                const qualitySelect = document.getElementById('clip-quality');
+                if (qualitySelect && qualitySelect.options.length > 0) {
+                    qualitySelect.disabled = false;
+                }
             }
         }
 
@@ -673,14 +890,15 @@ document.getElementById('clip-btn').addEventListener('click', async () => {
 
     updateProgressUI(10, 'Menyiapkan Klip...', `Menghubungi YouTube (${quality}p)...`);
 
-    // Simulasi progres dinamis yang cepat (karena pemotongan kini langsung via --download-sections)
-    let currentP = 10;
+    // Simulasi progres dinamis (maksimal tertahan di 92% hingga backend selesai 100%)
+    let currentP = 15;
     const progressTimer = setInterval(() => {
         if (currentP < 90) {
-            currentP += Math.random() * 14 + 6;
-            updateProgressUI(currentP, `Memproses Klip (${Math.round(currentP)}%)`, `Mengunduh potongan ${startTime} - ${endTime} [${quality}p]...`);
+            currentP += Math.random() * 8 + 4;
+            const displayP = Math.min(92, Math.round(currentP));
+            updateProgressUI(displayP, `Memproses Klip (${displayP}%)`, `Mengunduh potongan ${startTime} - ${endTime} [${quality}p]...`);
         }
-    }, 400);
+    }, 450);
 
     try {
         const response = await fetch('/api/clip', {
@@ -703,29 +921,199 @@ document.getElementById('clip-btn').addEventListener('click', async () => {
             document.getElementById('loading-section').style.display = 'none';
             document.getElementById('result-section').style.display = 'flex';
 
+            let originalClipFilename = data.filename; // Simpan file asli hasil potongan awal
+            let currentClipFilename = data.filename;
             const resultVideo = document.getElementById('result-video');
-            resultVideo.src = `/api/download/${data.filename}`;
+            resultVideo.src = `/api/download/${currentClipFilename}`;
 
             const durationStr = secondsToMMSS(data.duration);
-            document.getElementById('result-filename').textContent = `${data.filename} · ${durationStr}`;
+            const updateFilenameDisplay = () => {
+                document.getElementById('result-filename').textContent = `${currentClipFilename} · ${durationStr}`;
+            };
+            updateFilenameDisplay();
 
-            // Setup download
-            document.getElementById('download-btn').onclick = () => {
-                window.location.href = `/api/download/${data.filename}`;
+            // Setup Dropdown Tunggal: Simpan Video / Audio
+            const saveMainBtn = document.getElementById('save-main-btn');
+            const saveDropdown = document.getElementById('save-unified-dropdown');
+            const optNormal = document.getElementById('save-opt-normal');
+            const optMuted = document.getElementById('save-opt-muted');
+            const optAudio = document.getElementById('save-opt-audio');
+
+            if (saveMainBtn && saveDropdown) {
+                saveMainBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    const isVisible = saveDropdown.style.display === 'flex';
+                    saveDropdown.style.display = isVisible ? 'none' : 'flex';
+                };
+
+                document.addEventListener('click', (e) => {
+                    if (!e.target.closest('.save-unified-wrapper')) {
+                        saveDropdown.style.display = 'none';
+                    }
+                });
+            }
+
+            // Eksekusi Simpan Video (Normal / Bisu)
+            async function executeSaveVideo(isMuted = false) {
+                if (saveDropdown) saveDropdown.style.display = 'none';
+                saveMainBtn.disabled = true;
+
+                const originalHTML = saveMainBtn.innerHTML;
+                saveMainBtn.innerHTML = `<span class="btn-icon">⏳</span><span>${isMuted ? 'Membisukan...' : 'Menyimpan...'}</span>`;
+
+                let targetSaveFilename = currentClipFilename;
+
+                try {
+                    if (isMuted) {
+                        const muteRes = await fetch('/api/mute-video', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ filename: currentClipFilename })
+                        });
+                        const muteJson = await muteRes.json();
+                        if (!muteRes.ok) throw new Error(muteJson.error || 'Gagal memproses video bisu');
+                        targetSaveFilename = muteJson.filename;
+                    }
+
+                    let customSavedPath = '';
+                    try {
+                        const saveRes = await fetch('/api/save-to-custom-dir', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ filename: targetSaveFilename, type: 'video' })
+                        });
+                        const resJson = await saveRes.json();
+                        if (resJson.success && resJson.savedPath) {
+                            customSavedPath = resJson.savedPath;
+                        }
+                    } catch (e) {
+                        console.warn('Gagal salin ke folder custom:', e);
+                    }
+
+                    const labelType = isMuted ? 'Video tanpa suara' : 'Video';
+
+                    // Jika pengguna TIDAK mengatur custom directory, baru picu unduhan browser bawaan
+                    if (!customSavedPath) {
+                        const a = document.createElement('a');
+                        a.href = `/api/download/${targetSaveFilename}`;
+                        a.download = targetSaveFilename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        showToast(`${labelType} disimpan: ${targetSaveFilename}`, 'success');
+                    } else {
+                        showToast(`${labelType} berhasil disimpan ke:\n${customSavedPath}`, 'success', 4500);
+                    }
+                } catch (err) {
+                    showToast('Gagal menyimpan video: ' + err.message, 'error');
+                } finally {
+                    saveMainBtn.disabled = false;
+                    saveMainBtn.innerHTML = originalHTML;
+                }
+            }
+
+            // Eksekusi Simpan Audio (MP3)
+            async function executeSaveAudio() {
+                if (saveDropdown) saveDropdown.style.display = 'none';
+                saveMainBtn.disabled = true;
+
+                const originalHTML = saveMainBtn.innerHTML;
+                saveMainBtn.innerHTML = `<span class="btn-icon">⏳</span><span>Mengekstrak Audio...</span>`;
+
+                try {
+                    const res = await fetch('/api/extract-audio', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ filename: currentClipFilename })
+                    });
+                    const audioData = await res.json();
+                    if (!res.ok) throw new Error(audioData.error || 'Gagal ekstrak audio');
+
+                    let customAudioPath = '';
+                    try {
+                        const copyRes = await fetch('/api/save-to-custom-dir', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ filename: audioData.audioFilename, type: 'audio' })
+                        });
+                        const copyJson = await copyRes.json();
+                        if (copyJson.success && copyJson.savedPath) {
+                            customAudioPath = copyJson.savedPath;
+                        }
+                    } catch (e) {
+                        console.warn('Gagal salin audio ke custom dir:', e);
+                    }
+
+                    // Jika pengguna TIDAK mengatur custom directory, baru picu unduhan browser bawaan
+                    if (!customAudioPath) {
+                        const a = document.createElement('a');
+                        a.href = `/api/download/${audioData.audioFilename}`;
+                        a.download = audioData.audioFilename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        showToast(`Audio berhasil disimpan (${audioData.audioFilename})`, 'success');
+                    } else {
+                        showToast(`Audio MP3 berhasil disimpan ke:\n${customAudioPath}`, 'success', 4500);
+                    }
+                } catch (err) {
+                    showToast('Gagal mengekstrak audio: ' + err.message, 'error');
+                } finally {
+                    saveMainBtn.disabled = false;
+                    saveMainBtn.innerHTML = originalHTML;
+                }
+            }
+
+            if (optNormal) optNormal.onclick = () => executeSaveVideo(false);
+            if (optMuted) optMuted.onclick = () => executeSaveVideo(true);
+            if (optAudio) optAudio.onclick = executeSaveAudio;
+
+            // Setup Terapkan Aspek Rasio (Crop / Blur)
+            const applyAspectBtn = document.getElementById('apply-aspect-btn');
+            const aspectSelect = document.getElementById('aspect-mode-select');
+            applyAspectBtn.onclick = async () => {
+                const mode = aspectSelect.value;
+                applyAspectBtn.disabled = true;
+                const originalText = applyAspectBtn.innerHTML;
+                applyAspectBtn.innerHTML = '<span>⏳ Memproses...</span>';
+
+                try {
+                    // Selalu gunakan klip asli sebagai basis konversi (bukan klip yang sudah di-crop bertumpuk)
+                    const res = await fetch('/api/convert-aspect', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ filename: originalClipFilename, mode })
+                    });
+                    const convertData = await res.json();
+                    if (!res.ok) throw new Error(convertData.error || 'Gagal mengubah rasio');
+
+                    // Ganti file klip aktif ke file hasil konversi dengan cache buster agar browser langsung refresh tampilan
+                    currentClipFilename = convertData.filename;
+                    resultVideo.src = `/api/download/${currentClipFilename}?t=${Date.now()}`;
+                    resultVideo.load();
+                    updateFilenameDisplay();
+                    showToast('Aspek rasio berhasil diubah!', 'success');
+                } catch (err) {
+                    showToast('Gagal mengubah rasio: ' + err.message, 'error');
+                } finally {
+                    applyAspectBtn.disabled = false;
+                    applyAspectBtn.innerHTML = originalText;
+                }
             };
 
-            // Setup delete
-            document.getElementById('delete-btn').onclick = async () => {
+            // Setup Delete Klip
+            const deleteBtn = document.getElementById('delete-btn');
+            deleteBtn.onclick = async () => {
                 const confirmed = await showConfirmModal(
                     'Hapus Klip Video?',
-                    'File klip video ini akan dihapus secara permanen dari server lokal.',
+                    `File klip "${currentClipFilename}" akan dihapus permanen dari server lokal.`,
                     'Ya, Hapus'
                 );
 
                 if (!confirmed) return;
 
                 try {
-                    const deleteResponse = await fetch(`/api/clip/${data.filename}`, {
+                    const deleteResponse = await fetch(`/api/clip/${currentClipFilename}`, {
                         method: 'DELETE'
                     });
 

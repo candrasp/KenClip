@@ -1,10 +1,42 @@
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
-import { unlink, mkdir, readdir, stat } from 'fs/promises';
-import { existsSync } from 'fs';
-import { join } from 'path';
+import { unlink, mkdir, readdir, stat, copyFile } from 'fs/promises';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { join, resolve } from 'path';
 
 const app = new Hono();
+
+// Struktur & konfigurasi lokal KenClip
+interface AppSettings {
+  videoSaveDir: string;
+  audioSaveDir: string;
+  autoOpenFolder: boolean;
+  autoCleanup: boolean;
+}
+
+const CONFIG_PATH = './kenclip.config.json';
+const defaultSettings: AppSettings = {
+  videoSaveDir: '',
+  audioSaveDir: '',
+  autoOpenFolder: false,
+  autoCleanup: true,
+};
+
+function getSettings(): AppSettings {
+  try {
+    if (existsSync(CONFIG_PATH)) {
+      const data = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'));
+      return { ...defaultSettings, ...data };
+    }
+  } catch (e) {
+    console.error('Error membaca config:', e);
+  }
+  return { ...defaultSettings };
+}
+
+function saveSettings(settings: AppSettings) {
+  writeFileSync(CONFIG_PATH, JSON.stringify(settings, null, 2), 'utf-8');
+}
 
 // Pastikan folder clips ada
 const ensureDirs = async () => {
@@ -17,7 +49,7 @@ const YT_HOSTS = new Set([
   'youtube.com', 'www.youtube.com', 'm.youtube.com',
   'music.youtube.com', 'youtu.be',
 ]);
-const SAFE_FILE = /^clip-\d+\.mp4$/;
+const SAFE_FILE = /^clip-\d+(?:-[a-z0-9_]+)*\.(mp4|mp3)$/;
 const VALID_QUALITIES: Record<string, number> = {
   '360': 360,
   '480': 480,
@@ -30,6 +62,8 @@ let busy = false;
 // Pembersihan otomatis file klip yang lebih tua dari 1 jam (berjalan tiap 15 menit)
 const cleanupOldClips = async () => {
   try {
+    const settings = getSettings();
+    if (!settings.autoCleanup) return;
     if (!existsSync('./clips')) return;
     const files = await readdir('./clips');
     const now = Date.now();
@@ -62,51 +96,173 @@ function isYouTubeUrl(raw: unknown): raw is string {
   }
 }
 
-// Serve static files
+// Serve static frontend files
 app.use('/*', serveStatic({ root: './src/public' }));
 
-// Helper function untuk extract video ID dari URL
-function extractVideoId(url: string): string | null {
-  const match = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([^&?\s]+)/);
-  return match ? match[1] : null;
+// API untuk mendapatkan settings
+app.get('/api/settings', (c) => {
+  return c.json({ success: true, settings: getSettings() });
+});
+
+// API untuk menyimpan settings
+app.post('/api/settings', async (c) => {
+  try {
+    const body = await c.req.json();
+    const current = getSettings();
+    const updated: AppSettings = {
+      videoSaveDir: typeof body.videoSaveDir === 'string' ? body.videoSaveDir.trim() : current.videoSaveDir,
+      audioSaveDir: typeof body.audioSaveDir === 'string' ? body.audioSaveDir.trim() : current.audioSaveDir,
+      autoOpenFolder: typeof body.autoOpenFolder === 'boolean' ? body.autoOpenFolder : current.autoOpenFolder,
+      autoCleanup: typeof body.autoCleanup === 'boolean' ? body.autoCleanup : current.autoCleanup,
+    };
+    saveSettings(updated);
+    return c.json({ success: true, settings: updated });
+  } catch (e: any) {
+    return c.json({ error: 'Gagal menyimpan pengaturan: ' + e.message }, 500);
+  }
+});
+
+let isFolderPickerActive = false;
+
+// API untuk memilih folder khusus Video
+app.post('/api/select-folder/video', async (c) => {
+  return handleSelectFolder('Pilih Folder Simpan Video (.mp4)');
+});
+
+// API untuk memilih folder khusus Audio
+app.post('/api/select-folder/audio', async (c) => {
+  return handleSelectFolder('Pilih Folder Simpan Audio (.mp3)');
+});
+
+// Helper dialog File Explorer Windows yang tangguh
+async function handleSelectFolder(title: string) {
+  if (isFolderPickerActive) {
+    return new Response(JSON.stringify({ success: false, busy: true }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  isFolderPickerActive = true;
+  try {
+    const psCommand = `
+      Add-Type -AssemblyName System.Windows.Forms
+      $f = New-Object System.Windows.Forms.OpenFileDialog
+      $f.ValidateNames = $false
+      $f.CheckFileExists = $false
+      $f.CheckPathExists = $true
+      $f.FileName = "PILIH_FOLDER"
+      $f.Title = "${title} - Buka folder lalu klik Open"
+      $f.Filter = "Folder Selection|*.*"
+      if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        $selected = $f.FileName
+        if ([System.IO.Directory]::Exists($selected)) {
+          Write-Output $selected
+        } else {
+          Write-Output ([System.IO.Path]::GetDirectoryName($selected))
+        }
+      }
+    `;
+
+    const proc = Bun.spawn(['powershell', '-NoProfile', '-Command', psCommand], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+
+    const [out, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+    const selectedPath = out.trim();
+
+    if (code === 0 && selectedPath) {
+      return new Response(JSON.stringify({ success: true, path: selectedPath }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    return new Response(JSON.stringify({ success: false, cancelled: true }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: 'Gagal membuka pemilih folder: ' + err.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } finally {
+    isFolderPickerActive = false;
+  }
 }
 
-// API untuk mendapatkan info video dasar secara instan via oEmbed (< 0.2 detik)
+// API untuk membuka folder di Windows Explorer
+app.post('/api/open-folder', async (c) => {
+  try {
+    const { path: targetDir } = await c.req.json();
+    const folderToOpen = targetDir && existsSync(targetDir) ? resolve(targetDir) : resolve('./clips');
+    Bun.spawn(['explorer.exe', folderToOpen]);
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: 'Gagal membuka folder: ' + err.message }, 500);
+  }
+});
+
+// API untuk simpan/salin file ke folder tujuan yang diatur
+app.post('/api/save-to-custom-dir', async (c) => {
+  try {
+    const { filename, type } = await c.req.json();
+    if (!filename || !SAFE_FILE.test(filename)) {
+      return c.json({ error: 'Nama file tidak valid' }, 400);
+    }
+
+    const sourcePath = join('./clips', filename);
+    if (!existsSync(sourcePath)) {
+      return c.json({ error: 'File sumber tidak ditemukan' }, 404);
+    }
+
+    const settings = getSettings();
+    const customDir = type === 'audio' ? settings.audioSaveDir : settings.videoSaveDir;
+
+    // Jika user belum menyetel folder khusus, beri tahu frontend agar menggunakan browser download
+    if (!customDir || !existsSync(customDir)) {
+      return c.json({ success: true, savedPath: '', openedFolder: false });
+    }
+
+    const targetDir = customDir;
+    const destPath = join(targetDir, filename);
+    if (resolve(sourcePath) !== resolve(destPath)) {
+      await copyFile(sourcePath, destPath);
+    }
+
+    if (settings.autoOpenFolder) {
+      Bun.spawn(['explorer.exe', targetDir]);
+    }
+
+    return c.json({ success: true, savedPath: destPath, openedFolder: settings.autoOpenFolder });
+  } catch (err: any) {
+    return c.json({ error: 'Gagal menyimpan file ke direktori tujuan: ' + err.message }, 500);
+  }
+});
+
+// API untuk mengambil info video dari oEmbed YouTube
 app.post('/api/video-info', async (c) => {
   try {
     const { url } = await c.req.json();
-
-    if (!url) {
-      return c.json({ error: 'URL tidak boleh kosong' }, 400);
-    }
 
     if (!isYouTubeUrl(url)) {
       return c.json({ error: 'URL YouTube tidak valid' }, 400);
     }
 
-    const videoId = extractVideoId(url);
-    if (!videoId) {
-      return c.json({ error: 'URL YouTube tidak valid' }, 400);
+    const videoIdMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([^&?\s]+)/);
+    const videoId = videoIdMatch ? videoIdMatch[1] : '';
+
+    const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+    const res = await fetch(oembedUrl);
+
+    if (!res.ok) {
+      return c.json({ error: 'Video tidak ditemukan atau bersifat privat' }, 404);
     }
 
-    // Ambil info video dasar via YouTube oEmbed API (super cepat)
-    const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
-    let title = 'Video YouTube';
-    let thumbnail = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+    const oembedData: any = await res.json();
 
-    try {
-      const response = await fetch(oembedUrl);
-      const data = await response.json();
-      if (data.title) title = data.title;
-      if (data.thumbnail_url) thumbnail = data.thumbnail_url;
-    } catch {}
-
-    // Langsung respons seketika tanpa blocking
     return c.json({
       success: true,
-      title,
+      title: oembedData.title || 'Video YouTube',
       videoId,
-      thumbnail,
       duration: 0
     });
 
@@ -211,6 +367,161 @@ app.post('/api/clip', async (c) => {
   }
 });
 
+// API untuk konversi aspek rasio video lokal yang sudah ada
+app.post('/api/convert-aspect', async (c) => {
+  try {
+    const { filename, mode } = await c.req.json();
+    if (!filename || !SAFE_FILE.test(filename) || !filename.endsWith('.mp4')) {
+      return c.json({ error: 'Nama file video tidak valid' }, 400);
+    }
+
+    const inputPath = join('./clips', filename);
+    if (!existsSync(inputPath)) {
+      return c.json({ error: 'File video asli tidak ditemukan' }, 404);
+    }
+
+    if (busy) return c.json({ error: 'Sedang memproses tugas lain, mohon tunggu antrean' }, 429);
+
+    let vfFilter = '';
+    let suffix = 'custom';
+
+    if (mode === '9:16-crop') {
+      vfFilter = 'crop=ih*(9/16):ih';
+      suffix = '9x16_crop';
+    } else if (mode === '9:16-blur') {
+      vfFilter = 'split[original][blur];[blur]scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,boxblur=luma_radius=min(h\\,w)/20:luma_power=1:chroma_radius=min(h\\,w)/20:chroma_power=1[bg];[original]scale=720:1280:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2';
+      suffix = '9x16_blur';
+    } else if (mode === '1:1') {
+      vfFilter = 'crop=ih:ih';
+      suffix = '1x1';
+    } else {
+      return c.json({ error: 'Mode aspek rasio tidak valid' }, 400);
+    }
+
+    const baseName = filename.replace(/\.mp4$/, '');
+    const outFilename = `${baseName}-${suffix}.mp4`;
+    const outputPath = join('./clips', outFilename);
+
+    busy = true;
+    console.log(`[FFmpeg Crop] Memproses rasio ${mode} untuk ${filename} -> ${outFilename}`);
+
+    const proc = Bun.spawn([
+      'ffmpeg',
+      '-y',
+      '-i', inputPath,
+      '-vf', vfFilter,
+      '-c:v', 'libx264',
+      '-preset', 'ultrafast',
+      '-c:a', 'copy',
+      outputPath,
+    ], { stdout: 'ignore', stderr: 'pipe' });
+
+    const [err, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
+    if (code !== 0) {
+      console.error('FFmpeg crop error:', err);
+      return c.json({ error: 'Gagal mengonversi video: ' + err.slice(-300) }, 500);
+    }
+
+    return c.json({ success: true, filename: outFilename });
+  } catch (error: any) {
+    return c.json({ error: 'Gagal memproses video: ' + error.message }, 500);
+  } finally {
+    busy = false;
+  }
+});
+
+// API untuk ekstraksi audio saja (MP3) on-demand
+app.post('/api/extract-audio', async (c) => {
+  try {
+    const { filename } = await c.req.json();
+    if (!filename || !SAFE_FILE.test(filename) || !filename.endsWith('.mp4')) {
+      return c.json({ error: 'Nama file video tidak valid' }, 400);
+    }
+
+    const inputPath = join('./clips', filename);
+    if (!existsSync(inputPath)) {
+      return c.json({ error: 'File video tidak ditemukan' }, 404);
+    }
+
+    if (busy) return c.json({ error: 'Sedang memproses tugas lain, mohon tunggu antrean' }, 429);
+
+    const baseName = filename.replace(/\.mp4$/, '');
+    const outFilename = `${baseName}.mp3`;
+    const outputPath = join('./clips', outFilename);
+
+    busy = true;
+    console.log(`[FFmpeg Audio] Mengekstrak audio MP3 dari ${filename}`);
+
+    const proc = Bun.spawn([
+      'ffmpeg',
+      '-y',
+      '-i', inputPath,
+      '-vn',
+      '-acodec', 'libmp3lame',
+      '-q:a', '2',
+      outputPath,
+    ], { stdout: 'ignore', stderr: 'pipe' });
+
+    const [err, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
+    if (code !== 0) {
+      console.error('FFmpeg audio error:', err);
+      return c.json({ error: 'Gagal mengekstrak audio: ' + err.slice(-300) }, 500);
+    }
+
+    return c.json({ success: true, audioFilename: outFilename });
+  } catch (error: any) {
+    return c.json({ error: 'Gagal mengekstrak audio: ' + error.message }, 500);
+  } finally {
+    busy = false;
+  }
+});
+
+// API untuk membuang audio dari video (Mute Video) secara instan tanpa re-encode
+app.post('/api/mute-video', async (c) => {
+  try {
+    const { filename } = await c.req.json();
+    if (!filename || !SAFE_FILE.test(filename) || !filename.endsWith('.mp4')) {
+      return c.json({ error: 'Nama file video tidak valid' }, 400);
+    }
+
+    const inputPath = join('./clips', filename);
+    if (!existsSync(inputPath)) {
+      return c.json({ error: 'File video tidak ditemukan' }, 404);
+    }
+
+    if (busy) return c.json({ error: 'Sedang memproses tugas lain, mohon tunggu antrean' }, 429);
+
+    const baseName = filename.replace(/\.mp4$/, '');
+    const outFilename = `${baseName}-muted.mp4`;
+    const outputPath = join('./clips', outFilename);
+
+    busy = true;
+    console.log(`[FFmpeg Mute] Menghapus audio dari ${filename} -> ${outFilename}`);
+
+    // -c:v copy -an (copy stream video murni, buang audio - instan < 1 detik)
+    const proc = Bun.spawn([
+      'ffmpeg',
+      '-y',
+      '-i', inputPath,
+      '-c:v', 'copy',
+      '-an',
+      outputPath,
+    ], { stdout: 'ignore', stderr: 'pipe' });
+
+    const [err, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
+    if (code !== 0) {
+      console.error('FFmpeg mute error:', err);
+      return c.json({ error: 'Gagal memproses video bisu: ' + err.slice(-300) }, 500);
+    }
+
+    return c.json({ success: true, filename: outFilename });
+  } catch (error: any) {
+    return c.json({ error: 'Gagal memproses video: ' + error.message }, 500);
+  } finally {
+    busy = false;
+  }
+});
+
 // API untuk download / streaming file dengan dukungan HTTP Range (seekable di browser)
 app.get('/api/download/:filename', async (c) => {
   try {
@@ -266,7 +577,7 @@ app.post('/api/shutdown', async (c) => {
   return c.json({ success: true, message: 'Server shutting down...' });
 });
 
-const port = 8888;
+const port = 57777;
 console.log(`🚀 KenClip Server berjalan di http://localhost:${port}`);
 
 export default {
